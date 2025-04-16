@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Parking Slot</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    
+    <style>
+        
+        .navbar {
+            background: #2c3e50;
+            padding: 1rem;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin-left: 2rem;
+        }
+
+      
+        #adminLoginModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+
+        #adminLoginModal input {
+            display: block;
+            margin: 10px 0;
+            padding: 10px;
+            width: 100%;
+        }
+
+        #adminLoginModal button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h2 {
+            color: #2c3e50;
+        }
+
+        .parking-lot {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .slot {
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            text-align: center;
+            background: white;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .slot:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .slot.occupied {
+            background: #ff4444;
+            color: white;
+            cursor: not-allowed;
+        }
+
+        .slot.selected {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .booking-form {
+            margin-top: 20px;
+            display: none;
+        }
+
+        input, button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            width: 80%;
+            max-width: 300px;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        #paymentMessage {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        .time-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .time-inputs input {
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .parking-lot {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+  
+    <nav class="navbar">
+        <h2>Smart Parking</h2>
+        <div class="nav-links">
+            <a href="#home">Home</a>
+            <a href="#admin-login" onclick="showAdminLogin()">Admin Login</a>
+        </div>
+    </nav>
+
+    <div id="adminLoginModal">
+        <input type="text" id="adminUsername" placeholder="Username">
+        <input type="password" id="adminPassword" placeholder="Password">
+        <button onclick="validateAdmin()">Login</button>
+    </div>
+
+    <div class="container">
+        <h2>Book Your Parking Slot</h2>
+        <div class="parking-lot" id="parkingLot"></div>
+
+        <div class="booking-form" id="bookingForm">
+            <input type="text" id="carNumber" placeholder="Enter Car Number" required>
+            <input type="text" id="ownerName" placeholder="Enter Owner's Name" required>
+            
+            <div class="time-inputs">
+                <div>
+                    <label>Entry Time</label>
+                    <input type="datetime-local" id="entryTime" required>
+                </div>
+                <div>
+                    <label>Exit Time</label>
+                    <input type="datetime-local" id="exitTime" required>
+                </div>
+            </div>
+
+            <button onclick="confirmBooking()">Confirm Booking</button>
+            <button onclick="cancelBooking()" style="background: #e74c3c;">Cancel</button>
+        </div>
+
+        <h3 id="paymentMessage"></h3>
+    </div>
+
+    <script>
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyADwASiP9yt0Gk63n_C1U907RW_kZOXu60",
+            authDomain: "car-parking-system-43d5f.firebaseapp.com",
+            databaseURL: "https://car-parking-system-43d5f-default-rtdb.firebaseio.com",
+            projectId: "car-parking-system-43d5f",
+            storageBucket: "car-parking-system-43d5f.appspot.com",
+            messagingSenderId: "881365232519",
+            appId: "1:881365232519:web:eb9de38f311410e1030122",
+            measurementId: "G-8S956LF18L"
+        };
+
+       
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const totalSlots = 10;
+        const pricePerHour = 50;
+
+        let selectedSlotIndex = null; 
+
+        function initializeParkingSlots() {
+            db.ref("parkingSlots").once("value").then(snapshot => {
+                let parkingSlots = snapshot.val();
+
+                if (!parkingSlots || parkingSlots.length < totalSlots) {
+                   
+                    const newSlots = new Array(totalSlots).fill(null);
+                    
+                    if (parkingSlots) {
+                        for (let i = 0; i < parkingSlots.length; i++) {
+                            newSlots[i] = parkingSlots[i];  
+                        }
+                    }
+
+                    db.ref("parkingSlots").set(newSlots).then(() => {
+                        console.log("Initialized parkingSlots with 10 slots.");
+                    });
+                }
+            });
+        }
+
+        function renderParkingLot(parkingSlots) {
+            const parkingLot = document.getElementById('parkingLot');
+            parkingLot.innerHTML = '';
+
+            for (let i = 0; i < totalSlots; i++) {
+                const slotDiv = document.createElement('div');
+                slotDiv.classList.add('slot');
+                if (parkingSlots && parkingSlots[i]) {
+                    slotDiv.classList.add('occupied');
+                    slotDiv.innerHTML = `
+                        <strong>Slot ${i + 1}</strong><br>
+                        🚗 ${parkingSlots[i].carNumber}<br>
+                        <small>Exit: ${new Date(parkingSlots[i].exitTime).toLocaleTimeString()}</small>
+                    `;
+                } else {
+                    slotDiv.innerHTML = `Slot ${i + 1} <br><span style="color: green;">Available</span>`;
+                    slotDiv.addEventListener('click', () => selectSlot(i));
+                }
+                parkingLot.appendChild(slotDiv);
+            }
+        }
+
+        function selectSlot(slotIndex) {
+            selectedSlotIndex = slotIndex;
+            const bookingForm = document.getElementById('bookingForm');
+            bookingForm.style.display = 'block'; 
+
+            const now = new Date();
+            const exitTime = new Date(now.getTime() + 60 * 60 * 1000); 
+
+            document.getElementById('entryTime').value = now.toISOString().slice(0, 16);
+            document.getElementById('exitTime').value = exitTime.toISOString().slice(0, 16);
+
+            const slots = document.querySelectorAll('.slot');
+            slots.forEach((slot, index) => {
+                if (index === slotIndex) {
+                    slot.classList.add('selected');
+                } else {
+                    slot.classList.remove('selected');
+                }
+            });
+        }
+
+        async function confirmBooking() {
+            const carNumber = document.getElementById('carNumber').value.trim();
+            const ownerName = document.getElementById('ownerName').value.trim();
+            const entryTime = document.getElementById('entryTime').value;
+            const exitTime = document.getElementById('exitTime').value;
+
+            if (!carNumber || !ownerName || !entryTime || !exitTime) {
+                alert('Please fill all fields!');
+                return;
+            }
+
+            const entryDate = new Date(entryTime);
+            const exitDate = new Date(exitTime);
+
+            if (entryDate >= exitDate) {
+                alert('Exit time must be after entry time!');
+                return;
+            }
+
+            try {
+                const snapshot = await db.ref("parkingSlots").once("value");
+                let parkingSlots = snapshot.val() || new Array(totalSlots).fill(null);
+
+                if (parkingSlots[selectedSlotIndex]) {
+                    alert('This slot is already occupied!');
+                    return;
+                }
+
+                const durationHours = Math.ceil((exitDate - entryDate) / (1000 * 60 * 60));
+                const totalPrice = durationHours * pricePerHour;
+
+                const paymentId = await processPayment(totalPrice);
+                if (!paymentId) throw new Error("Payment failed");
+
+                parkingSlots[selectedSlotIndex] = {
+                    carNumber,
+                    ownerName,
+                    entryTime: entryDate.toISOString(),
+                    exitTime: exitDate.toISOString(),
+                    paymentId
+                };
+
+                await db.ref("parkingSlots").set(parkingSlots);
+
+                scheduleSlotFreeing(selectedSlotIndex, exitDate);
+
+                document.getElementById('carNumber').value = '';
+                document.getElementById('ownerName').value = '';
+                document.getElementById('bookingForm').style.display = 'none';
+
+                document.getElementById('paymentMessage').textContent = `Payment Successful! Slot ${selectedSlotIndex + 1} booked for ${carNumber}.`;
+                setTimeout(() => {
+                    document.getElementById('paymentMessage').textContent = '';
+                }, 5000);
+            } catch (error) {
+                console.error("Error updating Firebase:", error);
+                alert("An error occurred while booking the slot.");
+            }
+        }
+
+        async function processPayment(amount) {
+            return new Promise((resolve) => {
+                const options = {
+                    key: "rzp_test_U3AJ9MRYLzRywd", 
+                    amount: amount * 100,
+                    currency: "INR",
+                    name: "Smart Parking",
+                    handler: function(response) {
+                        resolve(response.razorpay_payment_id);
+                    }
+                };
+                const rzp = new Razorpay(options);
+                rzp.open();
+            });
+        }
+
+        function scheduleSlotFreeing(slotIndex, exitTime) {
+            const now = new Date();
+            const timeUntilExit = exitTime - now;
+
+            if (timeUntilExit > 0) {
+                setTimeout(async () => {
+                    const snapshot = await db.ref("parkingSlots").once("value");
+                    const slots = snapshot.val() || [];
+                    if (slots[slotIndex]) {
+                        slots[slotIndex] = null;
+                        await db.ref("parkingSlots").set(slots);
+                    }
+                }, timeUntilExit);
+            }
+        }
+
+        function cancelBooking() {
+            selectedSlotIndex = null;
+            document.getElementById('bookingForm').style.display = 'none'; // Hide the form
+            document.getElementById('carNumber').value = '';
+            document.getElementById('ownerName').value = '';
+
+            const slots = document.querySelectorAll('.slot');
+            slots.forEach(slot => slot.classList.remove('selected'));
+        }
+
+        function showAdminLogin() {
+            document.getElementById('adminLoginModal').style.display = 'block';
+        }
+
+        function validateAdmin() {
+            const username = document.getElementById('adminUsername').value;
+            const password = document.getElementById('adminPassword').value;
+            
+            if (username === "Vinod" && password === "123456") {
+                window.location.href = "admin.html";
+            } else {
+                alert("Invalid credentials!");
+            }
+        }
+
+        initializeParkingSlots();
+
+        db.ref("parkingSlots").on("value", (snapshot) => {
+            renderParkingLot(snapshot.val() || Array(totalSlots).fill(null));
+        });
+    </script>
+</body>
+</html>

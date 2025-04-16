@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    
+    <style>
+       
+        .navbar {
+            background: #2c3e50;
+            padding: 1rem;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin-left: 2rem;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .parking-lot {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .slot {
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            text-align: center;
+            background: white;
+        }
+
+        .occupied {
+            background: #ff4444;
+            color: white;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input, button {
+            padding: 8px 12px;
+            font-size: 14px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        .collection {
+            font-size: 24px;
+            color: #2c3e50;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h2>Admin Dashboard</h2>
+        <div class="nav-links">
+            <a href="home.html">Home</a>
+        </div>
+    </nav>
+
+    <div class="collection">
+        Today's Collection: ₹<span id="totalCollection">0</span>
+    </div>
+
+    <div class="dashboard">
+        <div class="section">
+            <h2>Parking Slots</h2>
+            <div class="controls">
+                <button onclick="exitAllCars()">Exit All Cars</button>
+            </div>
+            <div class="parking-lot" id="parkingLot"></div>
+        </div>
+
+        <div class="section">
+            <h2>Collections</h2>
+            <div>
+                <p>This Week's Collection: ₹<span id="weekCollection">0</span></p>
+                <p>This Month's Collection: ₹<span id="monthCollection">0</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+  
+        const firebaseConfig = {
+            apiKey: "AIzaSyADwASiP9yt0Gk63n_C1U907RW_kZOXu60",
+            authDomain: "car-parking-system-43d5f.firebaseapp.com",
+            databaseURL: "https://car-parking-system-43d5f-default-rtdb.firebaseio.com",
+            projectId: "car-parking-system-43d5f",
+            storageBucket: "car-parking-system-43d5f.appspot.com",
+            messagingSenderId: "881365232519",
+            appId: "1:881365232519:web:eb9de38f311410e1030122",
+            measurementId: "G-8S956LF18L"
+        };
+
+       
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const totalSlots = 10;
+        const pricePerHour = 50;
+
+        let todayCollection = 0;
+        let weekCollection = 0;
+        let monthCollection = 0;
+
+        async function calculateCollections() {
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+            todayCollection = 0;
+            weekCollection = 0;
+            monthCollection = 0;
+
+            const paymentsSnapshot = await db.ref("payments").once("value");
+            const payments = paymentsSnapshot.val() || [];
+
+            for (const key in payments) {
+                const payment = payments[key];
+                const paymentDate = new Date(payment.timestamp);
+
+                if (paymentDate >= todayStart) {
+                    todayCollection += payment.amount;
+                }
+                if (paymentDate >= weekStart) {
+                    weekCollection += payment.amount;
+                }
+                if (paymentDate >= monthStart) {
+                    monthCollection += payment.amount;
+                }
+            }
+
+            document.getElementById('totalCollection').textContent = todayCollection;
+            document.getElementById('weekCollection').textContent = weekCollection;
+            document.getElementById('monthCollection').textContent = monthCollection;
+        }
+        function renderParkingLot(parkingSlots) {
+            const parkingLot = document.getElementById('parkingLot');
+            parkingLot.innerHTML = '';
+
+            for (let i = 0; i < totalSlots; i++) {
+                const slotDiv = document.createElement('div');
+                slotDiv.classList.add('slot');
+                if (parkingSlots && parkingSlots[i]) {
+                    slotDiv.classList.add('occupied');
+                    slotDiv.innerHTML = `
+                        <strong>Slot ${i + 1}</strong><br>
+                        🚗 ${parkingSlots[i].carNumber}<br>
+                        <small>Exit: ${new Date(parkingSlots[i].exitTime).toLocaleTimeString()}</small>
+                        <button onclick="confirmExitCar(${i})">Exit Car</button>
+                        <button onclick="editCar(${i})">Edit Car</button>
+                    `;
+                } else {
+                    slotDiv.innerHTML = `Slot ${i + 1} <br><span style="color: green;">Available</span>`;
+                }
+                parkingLot.appendChild(slotDiv);
+            }
+        }
+
+        function confirmExitCar(slotIndex) {
+            const confirmExit = confirm("Are you sure you want to exit this car?");
+            if (confirmExit) {
+                exitCar(slotIndex);
+            }
+        }
+
+        async function exitCar(slotIndex) {
+            const snapshot = await db.ref("parkingSlots").once("value");
+            const parkingSlots = snapshot.val() || [];
+            if (parkingSlots[slotIndex]) {
+            
+                parkingSlots[slotIndex] = null;
+                await db.ref("parkingSlots").set(parkingSlots);
+
+         
+                await calculateCollections();
+            }
+        }
+
+        
+        async function exitAllCars() {
+            const confirmExitAll = confirm("Are you sure you want to exit all cars?");
+            if (confirmExitAll) {
+                const snapshot = await db.ref("parkingSlots").once("value");
+                const parkingSlots = snapshot.val() || [];
+                const newSlots = new Array(totalSlots).fill(null);
+                await db.ref("parkingSlots").set(newSlots);
+
+                await calculateCollections();
+            }
+        }
+
+        
+        async function editCar(slotIndex) {
+            const snapshot = await db.ref("parkingSlots").once("value");
+            const parkingSlots = snapshot.val() || [];
+            const car = parkingSlots[slotIndex];
+
+            if (car) {
+                const newCarNumber = prompt("Enter new car number:", car.carNumber);
+                const newOwnerName = prompt("Enter new owner name:", car.ownerName);
+
+                if (newCarNumber && newOwnerName) {
+                    parkingSlots[slotIndex].carNumber = newCarNumber;
+                    parkingSlots[slotIndex].ownerName = newOwnerName;
+                    await db.ref("parkingSlots").set(parkingSlots);
+                }
+            }
+        }
+
+       
+        db.ref("parkingSlots").on("value", (snapshot) => {
+            const parkingSlots = snapshot.val() || Array(totalSlots).fill(null);
+            renderParkingLot(parkingSlots);
+        });
+
+       
+        calculateCollections();
+    </script>
+</body>
+</html>
